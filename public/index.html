@@ -13,6 +13,10 @@
     .progress-track { background: #eee; border-radius: 4px; overflow: hidden; height: 1.5rem; margin: 0.5rem 0; }
     .progress-fill { background: #2c7a4b; height: 100%; color: white; font-size: 0.8rem; text-align: right; padding-right: 0.4rem; box-sizing: border-box; white-space: nowrap; }
     .narrative { font-style: italic; color: #555; }
+    #live-map { background: #0b1e33; border-radius: 4px; display: block; }
+    .map-legend { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 0.5rem; font-size: 0.85rem; }
+    .map-legend span { display: inline-flex; align-items: center; gap: 0.3rem; }
+    .map-legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
   </style>
 </head>
 <body>
@@ -40,6 +44,14 @@
     <h2>Story Events</h2>
     <select id="event-select"></select>
     <div id="event-details"></div>
+  </section>
+
+  <section>
+    <h2>Live Map</h2>
+    <p>Abstract logistics-space view — not real-world geography. Positions are reported by connected Client Trackers over <code>/ws/telemetry</code> and relayed here via <code>/ws/live</code>.</p>
+    <canvas id="live-map" width="600" height="400"></canvas>
+    <div class="map-legend" id="map-legend"></div>
+    <p id="map-status">Connecting...</p>
   </section>
 
   <script>
@@ -119,8 +131,73 @@
       `;
     }
 
+    const MEDIUM_COLORS = {
+      HIGHWAY: "#e0a72c",
+      RAIL: "#8a6de0",
+      MARITIME: "#2ca7e0",
+      AVIATION: "#e05a5a",
+      ORBITAL: "#5ae0a0",
+    };
+
+    function setupLiveMap() {
+      const canvas = document.getElementById("live-map");
+      const ctx = canvas.getContext("2d");
+      const statusEl = document.getElementById("map-status");
+      const legendEl = document.getElementById("map-legend");
+      const players = new Map(); // player_uuid -> { x, y, medium, at }
+
+      legendEl.innerHTML = Object.entries(MEDIUM_COLORS)
+        .map(([medium, color]) => `<span><i style="background:${color}"></i>${medium}</span>`)
+        .join("");
+
+      function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const now = Date.now();
+        for (const [playerUuid, p] of players) {
+          // drop markers we haven't heard from in a while so the map doesn't accumulate stale dots
+          if (now - p.receivedAt > 30000) {
+            players.delete(playerUuid);
+            continue;
+          }
+          const px = (p.x / 1000) * canvas.width;
+          const py = (p.y / 1000) * canvas.height;
+          ctx.beginPath();
+          ctx.arc(px, py, 5, 0, Math.PI * 2);
+          ctx.fillStyle = MEDIUM_COLORS[p.medium] || "#ffffff";
+          ctx.fill();
+          ctx.fillStyle = "#ffffff";
+          ctx.font = "10px system-ui, sans-serif";
+          ctx.fillText(playerUuid, px + 8, py + 3);
+        }
+      }
+
+      function connect() {
+        const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+        const ws = new WebSocket(`${protocol}//${location.host}/ws/live`);
+
+        ws.onopen = () => { statusEl.textContent = `Connected. ${players.size} tracked.`; };
+        ws.onclose = () => {
+          statusEl.textContent = "Disconnected, retrying...";
+          setTimeout(connect, 2000);
+        };
+        ws.onerror = () => ws.close();
+
+        ws.onmessage = (event) => {
+          const msg = JSON.parse(event.data);
+          if (msg.type !== "position") return;
+          players.set(msg.player_uuid, { x: msg.x, y: msg.y, medium: msg.medium, receivedAt: Date.now() });
+          statusEl.textContent = `Connected. ${players.size} tracked.`;
+          draw();
+        };
+      }
+
+      connect();
+      setInterval(draw, 1000); // also redraw periodically so stale markers expire even without new messages
+    }
+
     loadManifests();
     loadEventOptions();
+    setupLiveMap();
   </script>
 </body>
 </html>

@@ -1,6 +1,10 @@
 import express from "express";
+import http from "http";
 import path from "path";
 import { pool } from "./db";
+import { createManifest, updateManifestStatus, ManifestValidationError, ManifestReferenceError } from "./manifests";
+import { isUniqueViolation, isForeignKeyViolation } from "./db-errors";
+import { attachTelemetryWebSocketServer } from "./telemetry-ws";
 
 const app = express();
 app.use(express.json());
@@ -18,67 +22,33 @@ app.get("/api/manifests", async (_req, res) => {
 });
 
 app.post("/api/manifests", async (req, res) => {
-  const {
-    commodity_code,
-    total_mass_kg,
-    total_volume_m3,
-    origin_node_id,
-    destination_node_id,
-    required_engine_archetype,
-    allowed_mediums,
-    assigned_player_uuid,
-    story_event_id,
-  } = req.body;
-
-  if (!commodity_code || !total_mass_kg || !total_volume_m3 || !origin_node_id || !destination_node_id) {
-    return res.status(400).json({
-      error: "commodity_code, total_mass_kg, total_volume_m3, origin_node_id, and destination_node_id are required",
-    });
-  }
-
   try {
-    const result = await pool.query(
-      `INSERT INTO global_tracking_manifest
-        (commodity_code, total_mass_kg, total_volume_m3, origin_node_id, destination_node_id, required_engine_archetype, allowed_mediums, assigned_player_uuid, story_event_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-       RETURNING *`,
-      [
-        commodity_code,
-        total_mass_kg,
-        total_volume_m3,
-        origin_node_id,
-        destination_node_id,
-        required_engine_archetype ?? null,
-        allowed_mediums ?? null,
-        assigned_player_uuid ?? null,
-        story_event_id ?? null,
-      ]
-    );
-    res.status(201).json(result.rows[0]);
+    const manifest = await createManifest(req.body);
+    res.status(201).json(manifest);
   } catch (err) {
-    if (isForeignKeyViolation(err)) {
-      return res.status(400).json({ error: "assigned_player_uuid or story_event_id does not reference an existing record" });
+    if (err instanceof ManifestValidationError) {
+      return res.status(400).json({ error: err.message });
+    }
+    if (err instanceof ManifestReferenceError) {
+      return res.status(400).json({ error: err.message });
     }
     throw err;
   }
 });
 
 app.patch("/api/manifests/:id/status", async (req, res) => {
-  const { current_status } = req.body;
-  const allowed = ["PENDING_EXTRACTION", "IN_TRANSIT", "FULFILLED"];
-  if (!allowed.includes(current_status)) {
-    return res.status(400).json({ error: `current_status must be one of: ${allowed.join(", ")}` });
+  try {
+    const manifest = await updateManifestStatus(req.params.id, req.body.current_status);
+    if (!manifest) {
+      return res.status(404).json({ error: "manifest not found" });
+    }
+    res.json(manifest);
+  } catch (err) {
+    if (err instanceof ManifestValidationError) {
+      return res.status(400).json({ error: err.message });
+    }
+    throw err;
   }
-
-  const result = await pool.query(
-    "UPDATE global_tracking_manifest SET current_status = $1 WHERE manifest_id = $2 RETURNING *",
-    [current_status, req.params.id]
-  );
-
-  if (result.rows.length === 0) {
-    return res.status(404).json({ error: "manifest not found" });
-  }
-  res.json(result.rows[0]);
 });
 
 // --- Companies ---
@@ -234,15 +204,11 @@ app.get("/api/story-events/:id/progress", async (req, res) => {
   });
 });
 
-function isForeignKeyViolation(err: unknown): boolean {
-  return typeof err === "object" && err !== null && (err as { code?: string }).code === "23503";
-}
-
-function isUniqueViolation(err: unknown): boolean {
-  return typeof err === "object" && err !== null && (err as { code?: string }).code === "23505";
-}
+const server = http.createServer(app);
+attachTelemetryWebSocketServer(server);
 
 const port = process.env.PORT ? Number(process.env.PORT) : 3000;
-app.listen(port, () => {
+server.listen(port, () => {
   console.log(`Meridium API listening on http://localhost:${port}`);
+  console.log(`Telemetry WebSocket listening on ws://localhost:${port}/ws/telemetry`);
 });
