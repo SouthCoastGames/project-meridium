@@ -61,17 +61,28 @@ npm run dev               # starts the API + dashboard on http://localhost:3000
 * `POST /api/players` — upsert a player, optionally attaching them to a company
 * `GET`/`POST /api/story-events` — community-wide logistics events (famines, blockades, disasters) with a mass-based goal
 * `GET /api/story-events/:id/progress` — global progress toward the goal, broken down by company and by player
+* `ws://.../ws/telemetry` — ingestion: `identify`, `manifest.create`, `manifest.status`, and `position` (`{x, y, medium}`, abstract coordinate space, not real-world geography)
+* `ws://.../ws/live` — broadcast-only: relays `position` updates to any connected viewer (e.g. the dashboard's Live Map)
 
-The dashboard at `/` lets you create and view manifests, and shows live progress on active story events.
+The dashboard at `/` lets you create and view manifests, shows live progress on active story events, and renders a live map of connected players' reported positions. Try `npm run simulate` (in a second terminal, while `npm run dev` is running) to fake a Client Tracker sending position updates and watch it move on the map.
 
 ### 🚀 Roadmap & Project Milestones
 
 ### Phase 1: Core API & Web Dashboard (Current Focus)
 
-* Establish the centralized web platform database structure.
-* Build the live web map layout with support for multi-layered coordinate grids (Terrestrial, Maritime, Atmospheric, Orbital).
-* Expose the base REST/WebSocket APIs for telemetry ingestion.
-* **Community Story Events:** Meridium-native companies and community-wide logistics events (famines, blockades, disasters) that players contribute toward, with progress tracked globally, by company, and by individual player.
+* [x] Establish the centralized web platform database structure.
+* [x] **Community Story Events:** Meridium-native companies and community-wide logistics events (famines, blockades, disasters) that players contribute toward, with progress tracked globally, by company, and by individual player.
+* [x] Expose WebSocket APIs for telemetry ingestion (`ws://.../ws/telemetry` — `identify`, `manifest.create`, `manifest.status`, `position` messages).
+* [x] Live web map (abstract 2D coordinate space, color-coded by medium) fed by position telemetry broadcast over `ws://.../ws/live`. Not yet the "multi-layered coordinate grid" (Terrestrial/Maritime/Atmospheric/Orbital as distinct layers) called for below — currently one flat space with medium shown only as marker color.
+* [ ] Multi-layered map grids (Terrestrial, Maritime, Atmospheric, Orbital as distinct, switchable layers rather than one flat space).
+* [ ] Dashboard UI for creating companies, players, and story events (currently API/curl only).
+* [ ] Basic API auth (currently anything can create a manifest as any player — fine for local dev, not for anything multi-user).
+* [ ] Automated test coverage (everything so far has been verified manually).
+
+### Open Design Questions (Game Flow)
+
+* **Manifest origin — telemetry-driven vs. contract/job-board:** should manifests appear automatically from raw telemetry (player does something in-game, a manifest appears as a side effect), or should they be posted as jobs a player opts into (closer to ATS/ETS2's in-game freight market, and a better fit for story events)? Leaning toward contract/job-board for story events, telemetry-driven for regular background economy activity — not yet decided or built.
+* **Multi-leg / multi-modal shipments:** a manifest currently models one direct origin→destination leg. The core "living world" premise (farm → truck to a port → ship overseas → truck again to a consumer) needs some way to chain legs into one shipment, so an overseas relay doesn't lose the story-event contribution or the original player/company attribution partway through. Not yet designed.
 
 ### Phase 2: The Core Tracker Client
 
