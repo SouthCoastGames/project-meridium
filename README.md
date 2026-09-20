@@ -39,7 +39,30 @@ CREATE TABLE global_tracking_manifest (
     assigned_player_uuid VARCHAR(100)
 );
 ```
-Use code with caution.
+
+### 🚀 Getting Started
+
+Phase 1 has a minimal runnable skeleton: a Postgres-backed REST API plus a barebones dashboard.
+
+**Requirements:** Node.js 20+, a Postgres database (local install or Docker).
+
+```bash
+npm install
+cp .env.example .env      # then edit DATABASE_URL if needed
+npm run migrate           # creates global_tracking_manifest
+npm run dev               # starts the API + dashboard on http://localhost:3000
+```
+
+* `GET /api/health` — liveness check
+* `GET /api/manifests` — list the most recent cargo manifests
+* `POST /api/manifests` — create a manifest (`commodity_code`, `total_mass_kg`, `total_volume_m3`, `origin_node_id`, `destination_node_id` required; optional `assigned_player_uuid`, `story_event_id`)
+* `PATCH /api/manifests/:id/status` — update a manifest's `current_status`
+* `GET`/`POST /api/companies` — Meridium-native companies (not tied to any single sim's in-game company system)
+* `POST /api/players` — upsert a player, optionally attaching them to a company
+* `GET`/`POST /api/story-events` — community-wide logistics events (famines, blockades, disasters) with a mass-based goal
+* `GET /api/story-events/:id/progress` — global progress toward the goal, broken down by company and by player
+
+The dashboard at `/` lets you create and view manifests, and shows live progress on active story events.
 
 ### 🚀 Roadmap & Project Milestones
 
@@ -48,6 +71,7 @@ Use code with caution.
 * Establish the centralized web platform database structure.
 * Build the live web map layout with support for multi-layered coordinate grids (Terrestrial, Maritime, Atmospheric, Orbital).
 * Expose the base REST/WebSocket APIs for telemetry ingestion.
+* **Community Story Events:** Meridium-native companies and community-wide logistics events (famines, blockades, disasters) that players contribute toward, with progress tracked globally, by company, and by individual player.
 
 ### Phase 2: The Core Tracker Client
 
