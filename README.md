@@ -23,7 +23,7 @@ To ensure Meridium is completely future-proof and game-agnostic, the platform ca
 
 The master server treats the entire world as a unified network of nodes. It tracks the state changes of unique cargo payloads as they transition across different software clients. 
 
-sql
+```sql
 
 -- The Master Cargo Manifest
 CREATE TABLE global_tracking_manifest (
@@ -38,7 +38,7 @@ CREATE TABLE global_tracking_manifest (
     current_status VARCHAR(30),                -- 'PENDING_EXTRACTION', 'IN_TRANSIT', 'FULFILLED'
     assigned_player_uuid VARCHAR(100)
 );
-
+```
 Use code with caution.
 
 ### 🚀 Roadmap & Project Milestones
